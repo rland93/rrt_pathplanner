@@ -24,13 +24,15 @@ def r2norm(x):
     return sqrt(x[0] * x[0] + x[1] * x[1])
 
 
-def random_point_og(og: np.ndarray) -> np.ndarray:
+def random_point_og(og: np.ndarray, rnd_gen: np.random.Generator = None) -> np.ndarray:
     """Get a random point in free space from the occupancyGrid.
 
     Parameters
     ----------
     og : np.ndarray
         occupancyGrid. 1 is obstacle, 0 is free space.
+    rnd_gen: np.random.Generator
+        A randomness generator (to allow a deterministic output).
 
     Returns
     -------
@@ -38,7 +40,8 @@ def random_point_og(og: np.ndarray) -> np.ndarray:
         randomly-sampled point
     """
     free = np.argwhere(og == 0)
-    return free[np.random.randint(0, free.shape[0])]
+    generator = np.random.randint if rnd_gen is None else rnd_gen.integers
+    return free[generator(low=0, high=free.shape[0])]
 
 
 ############# RRT BASE CLASS ##########################################################
@@ -51,6 +54,7 @@ class RRT(object):
         n: int,
         costfn: callable = None,
         pbar: bool = True,
+        seed: int = 0,
     ):
         # whether to display a progress bar
         self.pbar = pbar
@@ -76,6 +80,9 @@ class RRT(object):
         self.cost = costfn
         self.not_a_point = [np.inf, np.inf]
         self.not_a_dist = np.inf
+
+        # Initialize the random generator with the given seed
+        self.rand_gen = np.random.default_rng(seed)
 
     def route2gv(self, T: nx.DiGraph, gv) -> List[int]:
         """
@@ -230,7 +237,7 @@ class RRT(object):
         np.ndarray
             (2, ) array of a point in free space of occupancy grid.
         """
-        return self.free[np.random.choice(self.free.shape[0])]
+        return self.free[self.rand_gen.choice(self.free.shape[0])]
 
     def plan(self, xstart: np.ndarray, xgoal: np.ndarray):
         """
@@ -372,8 +379,9 @@ class RRTStandard(RRT):
         n: int,
         costfn: callable = None,
         pbar=True,
+        seed: int = 0,
     ):
-        super().__init__(og, n, costfn=costfn, pbar=pbar)
+        super().__init__(og, n, costfn=costfn, pbar=pbar, seed=seed)
 
     def plan(self, xstart: np.ndarray, xgoal: np.ndarray) -> Tuple[nx.DiGraph, int]:
         """
@@ -450,8 +458,9 @@ class RRTStar(RRT):
         r_rewire: float,
         costfn: callable = None,
         pbar=True,
+        seed: int = 0,
     ):
-        super().__init__(og, n, costfn=costfn, pbar=pbar)
+        super().__init__(og, n, costfn=costfn, pbar=pbar, seed=seed)
         self.r_rewire = r_rewire
 
     def plan(self, xstart: np.ndarray, xgoal: np.ndarray):
@@ -559,19 +568,19 @@ class RRTStarInformed(RRT):
         r_goal: float,
         costfn: callable = None,
         pbar: bool = True,
+        seed: int = 0,
     ):
-        super().__init__(og, n, costfn=costfn, pbar=pbar)
+        super().__init__(og, n, costfn=costfn, pbar=pbar, seed=seed)
         self.r_rewire = r_rewire
         self.r_goal = r_goal
         # store the ellipses for plotting later
         self.ellipses = {}
 
-    @staticmethod
-    def unitball():
+    def unitball(self):
         """draw a point from a uniform distribution bounded by the ball:
         U(x1, x2) ~ 1 > (x1)^2 + (x2)^2"""
-        r = np.random.uniform(0, 1)
-        theta = 2 * np.pi * np.random.uniform(0, 1)
+        r = self.rand_gen.uniform(0, 1)
+        theta = 2 * np.pi * self.rand_gen.uniform(0, 1)
         x = np.sqrt(r) * np.cos(theta)
         y = np.sqrt(r) * np.sin(theta)
         unif = np.array([x, y])
